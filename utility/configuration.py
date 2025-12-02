@@ -10,7 +10,9 @@ from utility.definitions import PvSource, PvDistribution, RunPhaseType, DD, SG, 
 
 
 class ConfigurationManager:
+    """Manages the application's configuration settings."""
     def __init__(self, config_filename=join(getcwd(), "config", "config.ini")):
+        """Initializes the ConfigurationManager."""
         self.__config = RawConfigParser(allow_no_value=True, interpolation=ExtendedInterpolation())
         self.__config.read_file(open(config_filename))
         self._registered_entries = {
@@ -25,24 +27,31 @@ class ConfigurationManager:
         }
 
     def _process_pv_estimation(self):
+        """Processes the 'pv_estimation' configuration setting."""
         return self.getarray("simulation", "pv_estimation", dtype=PvSource)
 
     def _process_optimization_type(self):
+        """Processes the 'optimization' configuration setting."""
         return self.getarray("simulation", "optimization", dtype=OptimizationType)
 
     def _process_pv_distribution(self):
+        """Processes the 'pv_distribution' configuration setting."""
         return self.getarray("simulation", "pv_distribution", dtype=PvDistribution)
 
     def _process_networks(self):
+        """Processes the 'networks' configuration setting."""
         return [Network(nw) for nw in self.getarray("simulation", "networks", dtype=int)]
 
     def _process_network_version(self):
+        """Processes the 'network_versions' configuration setting."""
         return self.getarray("simulation", "network_versions", dtype=PvPlacement)
 
     def _process_simulation_step(self):
+        """Processes the 'simulation_step' configuration setting."""
         return self.getarray("simulation", "simulation_step", dtype=RunPhaseType)
 
     def _process_disaggregation_strategy(self):
+        """Processes the 'disaggregation_strategy' configuration setting."""
         disagg_strategy = self.get("simulation", "disaggregation_strategy")
         if disagg_strategy == "decrease_demand":
             return DD
@@ -52,6 +61,7 @@ class ConfigurationManager:
             raise ValueError(f"Unknown disaggregation type {disagg_strategy}")
 
     def getarray(self, section, key, dtype=str, fallback=None):
+        """Gets a configuration value as an array."""
         val = self._get(section, key, fallback=fallback)
         try:
             return [dtype(v) for v in val]
@@ -59,11 +69,13 @@ class ConfigurationManager:
             return [dtype(val), ]
 
     def get(self, section, key, fallback=None):
+        """Gets a configuration value."""
         if section not in self._registered_entries or key not in self._registered_entries[section]:
             return self._get(section, key, fallback)
         return self._registered_entries[section][key]()
 
     def _get(self, section, key, fallback=None):
+        """A private method to get a configuration value."""
         try:
             value = self.__config.get(section, key, fallback=fallback)
         except Exception as e:
@@ -77,22 +89,28 @@ class ConfigurationManager:
         return list(filter(len, value.strip('][').split(',')))
 
     def set(self, section, key, value):
+        """Sets a configuration value."""
         self.__config.set(section, key, value)
 
     def setboolean(self, section, key, value):
+        """Sets a boolean configuration value."""
         boolean_str = 'True' if value else 'False'
         self.__config.set(section, key, boolean_str)
 
     def getboolean(self, section, key, fallback=None):
+        """Gets a boolean configuration value."""
         return self.__config.getboolean(section, key, fallback=fallback)
 
     def getint(self, section, key, fallback=None):
+        """Gets an integer configuration value."""
         return self.__config.getint(section, key, fallback=fallback)
 
     def getfloat(self, section, key, fallback=None):
+        """Gets a float configuration value."""
         return self.__config.getfloat(section, key, fallback=fallback)
 
     def has_option(self, section, option):
+        """Checks if a configuration option exists."""
         return self.__config.has_option(section, option)
 
 

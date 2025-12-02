@@ -15,6 +15,7 @@ from visualization.plot import plot_rand_water_profiles, plot_water_profiles
 
 scenario = "distribute_1.00_typical_most_pv"
 def plot_water_usage():
+    """Plots water usage profiles for different scenarios."""
     network_directory = configuration.config.get("path", "network")
     reader_for_z = NetworkReaderForZNetwork(network_directory)
     reader = NetworkReader(network_directory)
@@ -79,4 +80,5 @@ def plot_water_usage():
 
 
 if __name__ == "__main__":
+    # Main entry point of the script
     plot_water_usage()

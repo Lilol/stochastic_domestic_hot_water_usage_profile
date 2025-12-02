@@ -13,6 +13,7 @@ from utility.definitions import config_prototype_filename
 
 
 def numpy_representer(dumper, data):
+    """A representer for dumping numpy types to YAML."""
     if isinstance(data, (np.floating,)):
         return dumper.represent_float(float(data))
     elif isinstance(data, (np.integer,)):
@@ -25,10 +26,12 @@ yaml.add_representer(np.int64, numpy_representer)
 
 
 class NetworkWriter:
+    """Writes network configuration files."""
     filename = "load"
     measurement_filename = "measurements"
 
     def __init__(self, input_dir, output_directory, simplified_network=True):
+        """Initializes the NetworkWriter."""
         self.__output_directory = output_directory
         prototype_file = open(join(input_dir, f"{config_prototype_filename}.yaml"), "r")
         self.config_proto = yaml.load(prototype_file, yaml.Loader)
@@ -37,6 +40,7 @@ class NetworkWriter:
         self.file_name_generator = NetworkConfigFileNames(output_directory)
 
     def write(self, network_data, **kwargs):
+        """Writes the network configuration."""
         hss_data = kwargs.pop("hss_data", None)
         aggregation_level = kwargs.pop("aggregation_level", "both")
         if aggregation_level == "low" and not self.simplified:
@@ -50,6 +54,7 @@ class NetworkWriter:
         self.write_config(user_list, network_data, hss_data, **kwargs)
 
     def write_measurements(self, network_data, **kwargs):
+        """Writes the network measurement data."""
         aggregation_level = kwargs.pop("aggregation_level", "both")
         if aggregation_level in ("low", "both"):
             self.sum_network_measurements_by_type(network_data).to_csv(
@@ -60,6 +65,7 @@ class NetworkWriter:
 
     @staticmethod
     def sum_network_measurements_by_type(network_data):
+        """Sums network measurements by load type."""
         measurement = DataFrame(columns=["PV", "Residential", "Controlled"])
         measurement["Controlled"] = network_data.measurements[network_data.get_controlled()].sum(axis="columns")
         measurement["Residential"] = network_data.measurements[network_data.get_residential()].sum(axis="columns")
@@ -67,6 +73,7 @@ class NetworkWriter:
         return measurement
 
     def __write_aggregated(self, network_data, **kwargs):
+        """Writes the aggregated network configuration."""
         pv_filename = f"{self.filename}_pv"
         directory = self.file_name_generator.assemble_output_directory(**kwargs)
         makedirs(directory, exist_ok=True)
@@ -90,6 +97,7 @@ class NetworkWriter:
         return [pv_filename, battery_filename]
 
     def __write_disaggregated(self, network_data, **kwargs):
+        """Writes the disaggregated network configuration."""
         bess_size = kwargs.pop("bess_size") if "bess_size" in kwargs else 0
         directory = self.file_name_generator.assemble_output_directory(**kwargs)
         makedirs(directory, exist_ok=True)

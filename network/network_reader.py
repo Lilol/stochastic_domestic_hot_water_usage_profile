@@ -8,6 +8,7 @@ from optimization_configuration.network.definitions import Network
 
 
 class NetworkReader:
+    """Reads network data from files."""
     filename = "Fogyasztok_*_SAP_adatokkal_kieg*"
     to_select = ["e_yearly_controlled", "e_yearly_residential", "e_yearly_commercial", "pv_power",
                  "e_yearly_consumption"]
@@ -15,9 +16,11 @@ class NetworkReader:
                  "teljesitmeny": "pv_power", "kisuzleti": "e_yearly_commercial"}
 
     def __init__(self, input_directory):
+        """Initializes the NetworkReader with an input directory."""
         self.input_directory = input_directory
 
     def clean_df(self, df):
+        """Cleans and preprocesses the input DataFrame."""
         df = df.drop(df.columns[~df.columns.isin(self.to_select)], axis=1)
         df[df.isna()] = 0.0
         df = df.groupby(level=0).sum()
@@ -25,6 +28,7 @@ class NetworkReader:
         return df
 
     def read(self, network):
+        """Reads and processes network data from an Excel file."""
         try:
             file = glob(join(self.input_directory, str(network.value), self.filename))[0]
             df = read_excel(file, sheet_name=0, index_col=0, header=0).rename(columns=self.to_rename)
@@ -35,6 +39,7 @@ class NetworkReader:
 
 
 class NetworkReaderForZNetwork(NetworkReader):
+    """A specialized network reader for the Zsombo network."""
     consumer_filename = "consumers_clean.csv"
     consumption_filename = "measurements_clean.csv"
     id_filename = "ids.csv"
@@ -44,15 +49,18 @@ class NetworkReaderForZNetwork(NetworkReader):
                  "StreetLights": "e_yearly_streetlights"}
 
     def __init__(self, input_directory):
+        """Initializes the NetworkReaderForZNetwork."""
         super().__init__(input_directory)
 
     # Function to replace the only non-zero value in each row with a new number
     @staticmethod
     def replace_nonzero(row, new_number):
+        """Replaces the non-zero value in a row with a new number."""
         row[row != 0] = new_number
         return row
 
     def read(self, network):
+        """Reads and processes data for the Zsombo network."""
         assert network == Network.ZSOMBO, "Network must be Zsombo"
 
         consumers_file = join(self.input_directory, str(network.value), "from", self.consumer_filename)

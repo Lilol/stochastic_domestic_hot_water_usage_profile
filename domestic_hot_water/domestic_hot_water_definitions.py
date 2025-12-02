@@ -7,6 +7,7 @@ import pandas as pd
 
 
 class DiscreteProfile(Enum):
+    """Enumeration for discrete hot water usage profiles."""
     LIGHT = "Light"
     MEDIUM = "Medium"
     HEAVY = "Heavy"
@@ -21,6 +22,7 @@ _l_per_discrete_profile = {
 
 
 class ContinuousProfile(Enum):
+    """Enumeration for continuous hot water usage profiles."""
     Per1 = "1_Per"
     Per3 = "3_Per"
     Per10 = "10_Per"
@@ -28,6 +30,7 @@ class ContinuousProfile(Enum):
 
 
 def multiply_heavy_profile(vol_water_l):
+    """Calculates the multiplied heavy usage profile based on water volume."""
     mult = ceil(vol_water_l / _l_per_discrete_profile[DiscreteProfile.HEAVY])
     prof = draw_off_statistics[DiscreteProfile.HEAVY].copy()
     prof["occurrence"] *= mult
@@ -45,6 +48,7 @@ draw_off_statistics = {
 }
 
 class WaterHeaterData:
+    """A class to manage data related to water heaters."""
     from utility.configuration import config
 
     water_heater_data = pd.read_csv(join(config.get("path", "input"), "water_heater.csv"), delimiter=';', header=0,
@@ -53,18 +57,21 @@ class WaterHeaterData:
     max_power = water_heater_data["Power"].max()
 
     def get_heater_data(self, vol_water_l):
+        """Retrieves heater data for a given water volume."""
         if vol_water_l in self.water_heater_data.Volume.values:
             return self.water_heater_data[self.water_heater_data.Volume == vol_water_l].iloc[0].squeeze()
 
         return self.get_multiple_water_heaters(vol_water_l = vol_water_l)
 
     def find_heater_by_power(self, power_kwh):
+        """Finds a heater by its power rating."""
         if power_kwh <= self.max_power:
             return self.water_heater_data[self.water_heater_data.Power >= power_kwh].iloc[0].squeeze()
 
         return self.get_multiple_water_heaters(power_kwh=power_kwh)
 
     def get_multiple_water_heaters(self, vol_water_l=None, power_kwh=None):
+        """Calculates data for multiple water heaters combined."""
         mul = 0
         heater = None
         if vol_water_l is not None:
@@ -77,9 +84,8 @@ class WaterHeaterData:
         return heater.squeeze()
 
     def get_larger_heater_data(self, vol_water_l):
+        """Retrieves data for a heater larger than the specified volume."""
         if vol_water_l > self.max_w_heater_size:
             return self.get_multiple_water_heaters(vol_water_l*2)
 
         return self.water_heater_data[self.water_heater_data.Volume > vol_water_l].iloc[0].squeeze()
-
-

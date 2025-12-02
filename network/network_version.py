@@ -8,6 +8,7 @@ from utility.configuration import config
 
 
 def plot_cont_res(data):
+    """Plots the yearly residential and controlled energy consumption."""
     import matplotlib.pyplot as plt
     plt.plot(data.households.loc[data.households.e_yearly_residential < 50000, "e_yearly_residential"],
              label="E yearly residential (kWh)")
@@ -20,6 +21,7 @@ def plot_cont_res(data):
 
 
 def plot_cont_res_scat(data, cl_m, cl_y0):
+    """Plots a scatter plot of controlled vs. residential energy consumption."""
     import matplotlib.pyplot as plt
     plt.scatter(data.households.loc[data.households.e_yearly_residential < 50000, "e_yearly_residential"],
                 data.households.loc[data.households.e_yearly_residential < 50000, "e_yearly_controlled"])
@@ -41,6 +43,7 @@ def plot_cont_res_scat(data, cl_m, cl_y0):
 
 
 def remove_original_controlled(data):
+    """Removes the original controlled load data."""
     data.households.loc[:, "e_yearly_controlled"] = 0
     controlled = data.get_controlled()
     data.identifiers = data.identifiers.drop(index=controlled.astype(int))
@@ -48,12 +51,14 @@ def remove_original_controlled(data):
 
 
 class NetworkVersion:
+    """Manages different versions of a network configuration."""
     # KSH https://www.portfolio.hu/uzlet/20230129/b-es-h-tarifa-igy-allunk-az-ejszakai-es-hoszivattyus-aram-fogyasztasaval-593310
     # 0.29
     typical_controlled_penetration = 0.42
     id_type = int
 
     def __init__(self, nw, network_data):
+        """Initializes the NetworkVersion with a network and its data."""
         self.nw = nw
         self.controlled_consumer_penetration_type = (
             "original", "typical_least_pv", "typical_most_pv", "all_households")
@@ -75,6 +80,7 @@ class NetworkVersion:
         self.collected_versions = []
 
     def register_possible_controlled_power(self, data):
+        """Registers possible controlled power values for the network."""
         cm = data.identifiers.loc[data.identifiers.load_type == 3, "MeterNo"]
         self.available_yearly_power_values = DataFrame(
             columns=["meter", "scale", "yearly_energy", "original_likely_power"],
