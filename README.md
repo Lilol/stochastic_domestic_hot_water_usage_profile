@@ -231,7 +231,28 @@ These files are not included here; refer to your local project or data source fo
 
 ---
 
+## How to cite
+
+If you use this DHW profile generator in academic work or reports, please cite it as:
+
+> Barancsuk L., *Stochastic Domestic Hot Water Usage Profile Generator* (version 1.0), GitHub repository, 2025. Available at: https://github.com/Lilol/stochastic_domestic_hot_water_usage_profile
+
+
+You can also use a BibTeX-style entry:
+
+```bibtex
+@misc{dhw_profile_generator,
+  author       = {Barancsuk L.},
+  title        = {Stochastic Domestic Hot Water Usage Profile Generator},
+  year         = {2025},
+  howpublished = {GitHub repository},
+  note         = {Version 1.0},
+  url          = {https://github.com/Lilol/stochastic_domestic_hot_water_usage_profile}
+}
+```
+
+---
+
 ## License
 
 See `LICENSE` for licensing information.
-
