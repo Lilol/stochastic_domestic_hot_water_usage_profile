@@ -3,11 +3,6 @@ from os import getcwd
 from os.path import join
 from sys import argv
 
-from pandas import read_excel, to_datetime, Timedelta
-
-from optimization_configuration.network.definitions import Network, PvPlacement
-from utility.definitions import PvSource, PvDistribution, RunPhaseType, DD, SG, OptimizationType
-
 
 class ConfigurationManager:
     """Manages the application's configuration settings."""
@@ -15,50 +10,7 @@ class ConfigurationManager:
         """Initializes the ConfigurationManager."""
         self.__config = RawConfigParser(allow_no_value=True, interpolation=ExtendedInterpolation())
         self.__config.read_file(open(config_filename))
-        self._registered_entries = {
-            "simulation":
-                {"networks": self._process_networks,
-                 "pv_distribution": self._process_pv_distribution,
-                 "disaggregation_strategy": self._process_disaggregation_strategy,
-                 "simulation_step": self._process_simulation_step,
-                 "network_versions": self._process_network_version,
-                 "optimization": self._process_optimization_type,
-                 "pv_estimation": self._process_pv_estimation},
-        }
-
-    def _process_pv_estimation(self):
-        """Processes the 'pv_estimation' configuration setting."""
-        return self.getarray("simulation", "pv_estimation", dtype=PvSource)
-
-    def _process_optimization_type(self):
-        """Processes the 'optimization' configuration setting."""
-        return self.getarray("simulation", "optimization", dtype=OptimizationType)
-
-    def _process_pv_distribution(self):
-        """Processes the 'pv_distribution' configuration setting."""
-        return self.getarray("simulation", "pv_distribution", dtype=PvDistribution)
-
-    def _process_networks(self):
-        """Processes the 'networks' configuration setting."""
-        return [Network(nw) for nw in self.getarray("simulation", "networks", dtype=int)]
-
-    def _process_network_version(self):
-        """Processes the 'network_versions' configuration setting."""
-        return self.getarray("simulation", "network_versions", dtype=PvPlacement)
-
-    def _process_simulation_step(self):
-        """Processes the 'simulation_step' configuration setting."""
-        return self.getarray("simulation", "simulation_step", dtype=RunPhaseType)
-
-    def _process_disaggregation_strategy(self):
-        """Processes the 'disaggregation_strategy' configuration setting."""
-        disagg_strategy = self.get("simulation", "disaggregation_strategy")
-        if disagg_strategy == "decrease_demand":
-            return DD
-        elif disagg_strategy == "supplement_from_grid":
-            return SG
-        else:
-            raise ValueError(f"Unknown disaggregation type {disagg_strategy}")
+        self._registered_entries = {}
 
     def getarray(self, section, key, dtype=str, fallback=None):
         """Gets a configuration value as an array."""
@@ -117,15 +69,3 @@ class ConfigurationManager:
 # init_config
 config_file = argv[2] if len(argv) >= 3 else join(getcwd(), 'config', 'config.ini')
 config = ConfigurationManager(config_filename=config_file)
-
-
-def read_slp():
-    # Ugly ass code
-    prof_file = join(config.get("path", "root"), "Profiles.csv")
-    profiles = read_excel(prof_file, header=0, index_col=0)
-    profiles.loc[:, "Datetime"] = profiles.index.astype("str") + " " + profiles["Time"].astype("str")
-    profiles.loc[profiles['Datetime'].str.contains('24:00'), "Datetime"] = to_datetime(
-        profiles.loc[profiles['Datetime'].str.contains('24:00'), 'Datetime'].str.replace('24:00', '00:00')) + Timedelta(
-        days=1)
-    profiles.index = to_datetime(profiles["Datetime"])
-    return profiles

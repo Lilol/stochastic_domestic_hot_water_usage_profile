@@ -74,6 +74,7 @@ class DomesticHotWaterProfile:
 
 
 class IndividualHotWaterProfile:
+    """Generates individual hot water profiles for households."""
     # Based on KSH 2014 -- did not change radically since then
     water_consumption_per_person_per_day = 58.58
     c = 0.00116667  # kWh/kg/°C
@@ -85,196 +86,87 @@ class IndividualHotWaterProfile:
     year = config.getint("time", "simulation_year")
 
     def __init__(self, domestic_hot_water_profile):
+        """Initializes the IndividualHotWaterProfile with a DHW profile object."""
         self.yearly_dhw = domestic_hot_water_profile
 
-    def get_individual_profiles(self, network_data, year=None):
+    def get_individual_profile_from_e_yearly(self, e_yearly_controlled, year=None):
+        """Generates an individual hot water profile based on yearly energy consumption."""
         if year is None:
             year = self.year
         yearly_profile = self.yearly_dhw.return_yearly_profile(
             pd.date_range(start=f"{year}-01-01", end=f"{year}-12-31"))
-        all_profiles = []
-        for consumer_id, consumption in network_data.households.iterrows():
-            if np.isnan(consumption.e_yearly_controlled) or consumption.e_yearly_controlled == 0.:
-                continue
-            vol_water_used, n_people = IndividualHotWaterProfile.calc_number_of_occupants(
-                consumption.e_yearly_controlled)
-            discrete_water_usage_occurrences = self._get_discrete_water_usage(vol_water_used)
-            occupant_profile = self._get_occupant_profile(yearly_profile, n_people)
-            individual_continuous_profile = occupant_profile.copy() * vol_water_used
-            heater = self.calc_heater_size(n_people, consumption.e_yearly_controlled,
-                                           network_data.get_measurement(consumer_id, 3))
-            individual_discrete_profile = self._construct_individual_discrete_profile(discrete_water_usage_occurrences,
-                                                                                      individual_continuous_profile,
-                                                                                      consumer_id,
-                                                                                      heater.Volume)
-            all_profiles.append(individual_discrete_profile)
-            if np.any(individual_discrete_profile > heater.Volume):
-                raise ValueError(f"Withdrawn water amount exceeded hot water storage size {heater.Volume}")
 
-        all_profiles = pd.concat(all_profiles, axis="columns")
-        all_profiles.loc[:, "Total"] = all_profiles.sum(axis="columns")
-        return all_profiles
+        if np.isnan(e_yearly_controlled) or e_yearly_controlled == 0.:
+            return None
 
-    @classmethod
-    def calc_number_of_occupants(cls, e_yearly):
-        yearly_heat_consumption = e_yearly * cls.loss_coefficient
-        vol_water_used \
-            = yearly_heat_consumption / (cls.c * (cls.hot_water_temp - cls.cold_water_temp))
-        n_people = round(vol_water_used / (cls.water_consumption_per_person_per_day * 365))
-        return vol_water_used, n_people
+        vol_water_used, n_people = IndividualHotWaterProfile.calc_number_of_occupants(
+            e_yearly_controlled)
+        discrete_water_usage_occurrences = self._get_discrete_water_usage(vol_water_used)
 
-    @staticmethod
-    def calc_heater_size(n_people, e_yearly_controlled, measurement):
-        if n_people <= 1:
-            vol = 80
-        elif n_people in (2, 3):
-            vol = 120
-        elif n_people == 4:
-            vol = 150
-        elif n_people <= 7:
-            vol = 200
-        elif n_people <= 14:
-            # Two 200-l boilers
-            vol = 400
-        elif n_people <= 21:
-            vol = 600
-        else:
-            raise ValueError(f"Number of people is too large {n_people}")
-        heater_data = IndividualHotWaterProfile.water_heater_data.get_heater_data(vol)
-        if heater_data.Power < measurement.max():
-            heater_data = IndividualHotWaterProfile.water_heater_data.find_heater_by_power(measurement.max())
-        return heater_data
-
-    @staticmethod
-    def _get_discrete_water_usage(vol_water_l):
-        profile_type = IndividualHotWaterProfile._get_discrete_water_usage_profile(vol_water_l)
-        if profile_type != DiscreteProfile.MULTIPLE_HEAVY:
-            return draw_off_statistics[profile_type]
-        return multiply_heavy_profile(vol_water_l/365.)
+        return self._create_final_profile(yearly_profile, discrete_water_usage_occurrences, vol_water_used)
 
     @staticmethod
     def _get_discrete_water_usage_profile(vol_water_l):
         vol_water_l /= 365.
-        if vol_water_l <= _l_per_discrete_profile[DiscreteProfile.LIGHT]:
+        if vol_water_l <= _l_per_discrete_profile[DiscreteProfile.LIGHT] * 1.2:
             return DiscreteProfile.LIGHT
-        elif vol_water_l <= _l_per_discrete_profile[DiscreteProfile.MEDIUM]:
+        elif vol_water_l <= _l_per_discrete_profile[DiscreteProfile.MEDIUM] * 1.2:
             return DiscreteProfile.MEDIUM
-        elif vol_water_l <= _l_per_discrete_profile[DiscreteProfile.HEAVY]:
+        elif vol_water_l <= _l_per_discrete_profile[DiscreteProfile.HEAVY] * 1.2:
             return DiscreteProfile.HEAVY
         else:
             return DiscreteProfile.MULTIPLE_HEAVY
 
-    def _get_occupant_profile(self, yearly_profile, n_people):
-        if n_people == 1:
-            return yearly_profile[ContinuousProfile.Per1.value]
-        elif n_people in (2, 3):
-            return yearly_profile[ContinuousProfile.Per3.value]
-        elif 3 < n_people < 50:
-            return yearly_profile[ContinuousProfile.Per10.value]
+    def _get_discrete_water_usage(self, vol_water_l):
+        profile = IndividualHotWaterProfile._get_discrete_water_usage_profile(vol_water_l)
+        if profile == DiscreteProfile.MULTIPLE_HEAVY:
+            return multiply_heavy_profile(vol_water_l)
+        return draw_off_statistics[profile]
+
+    def _create_final_profile(self, yearly_profile, discrete_water_usage_occurrences, vol_water_used):
+        """Creates the final hot water profile from the yearly profile and usage occurrences."""
+        df = pd.DataFrame(0, index=yearly_profile.index, columns=["Hot water [l/h]"])
+        for draw_off_type, occurrences in discrete_water_usage_occurrences.iterrows():
+            if occurrences.occurrence == 0:
+                continue
+            for i in range(int(occurrences.occurrence)):
+                profile_selector = random.choice(yearly_profile.columns)
+                random_day = random.choice(yearly_profile.index.dayofyear)
+                random_hour = yearly_profile[profile_selector].nlargest(365 * 24).iloc[
+                    random.randint(0, int(len(yearly_profile[profile_selector]) / 2))
+                ]
+                while random_hour == 0:
+                    random_hour = yearly_profile[profile_selector].nlargest(365 * 24).iloc[
+                        random.randint(0, int(len(yearly_profile[profile_selector]) / 2))
+                    ]
+                random_time = random_hour.name
+                df.loc[random_time, "Hot water [l/h]"] += occurrences.volume_l
+
+        df = df.resample(config.get("time", "resolution")).sum()
+        df["Hot water [l/h]"] *= vol_water_used / df["Hot water [l/h]"].sum()
+        return df
+
+    @staticmethod
+    def calc_number_of_occupants(e_yearly_controlled):
+        """Calculates the number of occupants based on yearly controlled energy."""
+        yearly_heat_consumption = e_yearly_controlled * IndividualHotWaterProfile.loss_coefficient
+        vol_water_used = e_yearly_controlled / (
+                (IndividualHotWaterProfile.hot_water_temp - IndividualHotWaterProfile.cold_water_temp) *
+                IndividualHotWaterProfile.c * IndividualHotWaterProfile.loss_coefficient)
+        n_people = round(vol_water_used / (IndividualHotWaterProfile.water_consumption_per_person_per_day * 365))
+        return vol_water_used, n_people
+
+    @staticmethod
+    def calc_heater_size(n_people, e_yearly_controlled, measurement=None):
+        """Calculates the required water heater size."""
+        if n_people == 0:
+            vol_water_l = 50
         else:
-            # This is also used for the '0' occupant profile, when there is extremely little water usage
-            return yearly_profile[ContinuousProfile.Per50P.value]
-
-    def _construct_individual_discrete_profile(self, discrete_water_usage_occurrences, individual_continuous_profile,
-                                               consumer_id, max_drawoff):
-        dfs = []
-        for date, daily_profile in individual_continuous_profile.groupby(pd.Grouper(freq='D')):
-            df = self._distribute_water_usage_occurrences(discrete_water_usage_occurrences,
-                                                                              daily_profile, max_drawoff)
-            df.name = f"{consumer_id}"
-            dfs.append(df)
-        dfs = pd.concat(dfs, axis="rows")
-        return dfs
-
-    def _distribute_water_usage_occurrences(self, discrete_water_usage_occurrences, daily_continuous_profile,
-                                            max_drawoff):
-        daily_discrete_profile = daily_continuous_profile.copy()
-        daily_discrete_profile[:] = 0
-        d_idx, c_idx = None, None
-        for do in ("bath", "shower", "medium", "short"):
-            d_idx, c_idx = self._add_draw_off_to_profile(do, daily_discrete_profile, daily_continuous_profile,
-                                                         discrete_water_usage_occurrences.copy(), max_drawoff,
-                                                         d_idx=(d_idx if do == "shower" else None),
-                                                         c_idx=(c_idx if do == "shower" else None))
-        self.check_for_remaining_water(daily_continuous_profile, daily_discrete_profile)
-        return daily_discrete_profile
-
-    def _add_draw_off_to_profile(self, do, daily_discrete_profile, daily_continuous_profile,
-                                 discrete_water_usage_occurrences, max_drawoff, d_idx=None, c_idx=None):
-        occurrences = discrete_water_usage_occurrences.loc[do, "occurrence"]
-        if occurrences == 0:
-            return None, None
-        if d_idx is None:
-            d_idx, c_idx = self._get_index(do, daily_continuous_profile)
-        for i in range(occurrences):
-            volume = discrete_water_usage_occurrences.loc[do, "volume_l"]
-            if self.check_for_remaining_water(daily_continuous_profile, daily_discrete_profile, volume, do):
-                return None, None
-            daily_discrete_profile[d_idx] += volume
-            daily_continuous_profile[c_idx] -= volume
-            self._check_for_maximum_drawoff(daily_continuous_profile, daily_discrete_profile, d_idx, c_idx, max_drawoff)
-            self._redistribute_negative_draw_off(daily_continuous_profile, c_idx)
-            self._redistribute_max_draw_off(daily_continuous_profile, max_drawoff)
-            discrete_water_usage_occurrences.loc[do, "occurrence"] -= 1
-            if discrete_water_usage_occurrences.loc[do, "occurrence"] != 0:
-                d_idx, c_idx = self._get_index(do, daily_continuous_profile)
-        return d_idx, c_idx
-
-    def _check_for_maximum_drawoff(self, daily_continuous_profile, daily_discrete_profile, d_idx, c_idx, max_drawoff):
-        if daily_discrete_profile[d_idx] > max_drawoff:
-            daily_continuous_profile[c_idx] += daily_discrete_profile[d_idx] - max_drawoff
-            daily_discrete_profile[d_idx] = max_drawoff
-
-    def _get_index(self, do, daily_continuous_profile):
-        if do == "shower":
-            i = daily_continuous_profile.idxmax()
-            return i + pd.Timedelta(hours=self.__get_rand_time_offset(i)), i
-        elif do == "bath":
-            i = daily_continuous_profile.nlargest(2).index[1]
-            return i + pd.Timedelta(hours=self.__get_rand_time_offset(i)), i
-        else:
-            i = random.choices(daily_continuous_profile.index, daily_continuous_profile, k=1)[0]
-            return i, i
-
-    def __get_rand_time_offset(self, i):
-        if i.hour == 0:
-            return random.choices([0, 1, 2], [1, 0.75, 0.5], k=1)[0]
-        elif i.hour == 23:
-            return random.choices([-2, -1, 0], [0.5, 0.75, 1], k=1)[0]
-        return random.choices([-1, 0, 1], [0.75, 1, 0.75], k=1)[0]
-
-    def check_for_remaining_water(self, daily_continuous_profile, daily_discrete_profile, volume=None, do=None):
-        if volume is None and do is None:
-            d_idx, _ = self._get_index(do, daily_continuous_profile)
-            daily_discrete_profile[d_idx] = daily_continuous_profile.sum()
-            return True
-        if volume > daily_continuous_profile.sum():
-            if do == "short":
-                d_idx, _ = self._get_index(do, daily_continuous_profile)
-                daily_discrete_profile[d_idx] = daily_continuous_profile.sum()
-            return True
-        else:
-            return False
-
-    def _redistribute_negative_draw_off(self, daily_continuous_profile, idx):
-        if daily_continuous_profile[idx] > 0:
-            return
-
-        # TODO: Fix daily drawoffs, could results in more than maxdrawoff
-        vol_diff = -1 * daily_continuous_profile[idx]
-        daily_continuous_profile[idx] = 0
-        non_diff_values = daily_continuous_profile[daily_continuous_profile.index != idx]
-        daily_continuous_profile[
-            daily_continuous_profile.index != idx] -= non_diff_values / non_diff_values.sum() * vol_diff
-
-    def _redistribute_max_draw_off(self, daily_continuous_profile, max_drawoff):
-        if not any(daily_continuous_profile > max_drawoff):
-            return
-        indices = daily_continuous_profile[daily_continuous_profile > max_drawoff].index
-        vol_diff = daily_continuous_profile[indices].sum()
-        non_diff_values = daily_continuous_profile[~daily_continuous_profile.index.isin(indices)]
-        daily_continuous_profile[non_diff_values.index] += non_diff_values / non_diff_values.sum() * vol_diff
-        if not all(daily_continuous_profile <=max_drawoff):
-            logger.error(f"Error in redistributing water drawoffs, remaining volume is removed from the profile: "
-                         f"{(daily_continuous_profile[daily_continuous_profile > max_drawoff] - max_drawoff).sum()} l")
-            daily_continuous_profile[daily_continuous_profile > max_drawoff] = max_drawoff
+            vol_water_l = n_people * IndividualHotWaterProfile.water_consumption_per_person_per_day
+        if measurement is not None:
+            power = measurement[measurement > 0.2].max()
+            if not np.isnan(power):
+                heater = IndividualHotWaterProfile.water_heater_data.find_heater_by_power(power)
+                if heater.Volume > vol_water_l:
+                    return heater
+        return IndividualHotWaterProfile.water_heater_data.get_heater_data(vol_water_l)
