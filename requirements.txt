@@ -1,0 +1,13 @@
+tslearn
+holidays
+matplotlib
+pandas
+openpyxl
+numpy
+numpy_financial
+h5py
+scikit-learn
+seaborn
+PyYAML
+holidays
+pyemd
